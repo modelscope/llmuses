@@ -119,7 +119,7 @@ python llmuses/run_arena.py --c registry/config/cfg_single.yaml
 ```text
 评估流程的配置文件参考： llmuses/registry/config/cfg_pairwise_baseline.yaml
 字段说明：
-    questions_file: question data的路径
+    questions_file: question data的路径 
     answers_gen: 候选模型预测结果生成，支持多个模型，可通过enable参数控制是否开启该模型
     reviews_gen: 评估结果生成，目前默认使用GPT-4作为Auto-reviewer，可通过enable参数控制是否开启该步骤
     rating_gen: rating 算法，可通过enable参数控制是否开启该步骤，注意该步骤依赖review_file必须存在
