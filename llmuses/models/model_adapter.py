@@ -420,6 +420,9 @@ class ChatGenerationModelAdapter(BaseModelAdapter):
         outputs = self.model.generate(**input_ids, max_new_tokens=2048)
         response = self.tokenizer.decode(outputs[0])
 
+        # TODO: NOTE FILTER THE RES
+        response.split('<start_of_turn>model\n')[-1].strip('<eos>').strip()
+
         return response
 
     # def _model_generate(self, query: str, infer_cfg: dict) -> str:
