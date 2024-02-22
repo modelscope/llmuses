@@ -364,7 +364,8 @@ class ChatGenerationModelAdapter(BaseModelAdapter):
         self.generation_config, self.generation_template = self._parse_generation_config(tokenizer, model)
         logger.info(f'**Generation config init: {self.generation_config.to_dict()}')
 
-        super().__init__(model=model, tokenizer=self.generation_template.tokenizer, model_cfg=model_cfg)
+        # super().__init__(model=model, tokenizer=self.generation_template.tokenizer, model_cfg=model_cfg)  # TODO
+        super().__init__(model=model, tokenizer=tokenizer, model_cfg=model_cfg)
 
     def _parse_generation_config(self, tokenizer, model):
         from modelscope.utils.hf_util import GenerationConfig
@@ -404,48 +405,65 @@ class ChatGenerationModelAdapter(BaseModelAdapter):
 
         return generation_config, generation_template
 
+    # TODO: ONLY FOR GEMMA
     def _model_generate(self, query: str, infer_cfg: dict) -> str:
-        example = dict(query=query,
-                       history=[],
-                       system=None)
+        messages = [
+            {"role": "user", "content": query}
+        ]
+        text = self.tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True
+        )
+        input_ids = self.tokenizer([text], return_tensors="pt").to("cuda")
 
-        inputs = self.generation_template.encode(example)
-        input_ids = inputs['input_ids']
-        input_ids = torch.tensor(input_ids)[None].to(self.device)
-        attention_mask = torch.ones_like(input_ids).to(self.device)
+        outputs = self.model.generate(**input_ids, max_new_tokens=2048)
+        response = self.tokenizer.decode(outputs[0])
 
-        # Process infer_cfg
-        infer_cfg = infer_cfg or {}
-        if isinstance(infer_cfg.get('num_return_sequences'), int) and infer_cfg['num_return_sequences'] > 1:
-            infer_cfg['do_sample'] = True
-
-        # TODO: stop settings
-        stop = infer_cfg.get('stop', None)
-        eos_token_id = self.tokenizer.encode(stop, add_special_tokens=False)[0] \
-            if stop else self.tokenizer.eos_token_id
-
-        if eos_token_id is not None:
-            infer_cfg['eos_token_id'] = eos_token_id
-            infer_cfg['pad_token_id'] = eos_token_id  # setting eos_token_id as pad token
-
-
-        self.generation_config.update(**infer_cfg)
-
-        # stopping
-        stop_words = [self.generation_template.suffix[-1]]
-        decode_kwargs = {}
-        stopping_criteria = StoppingCriteriaList(
-            [StopWordsCriteria(self.tokenizer, stop_words, **decode_kwargs)])
-
-        # Run inference
-        output_ids = self.model.generate(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            generation_config=self.generation_config,
-            stopping_criteria=stopping_criteria, )
-
-        response = self.tokenizer.decode(output_ids[0, len(input_ids[0]):], True, **decode_kwargs)
         return response
+
+    # def _model_generate(self, query: str, infer_cfg: dict) -> str:
+    #     example = dict(query=query,
+    #                    history=[],
+    #                    system=None)
+    #
+    #     inputs = self.generation_template.encode(example)
+    #     input_ids = inputs['input_ids']
+    #     input_ids = torch.tensor(input_ids)[None].to(self.device)
+    #     attention_mask = torch.ones_like(input_ids).to(self.device)
+    #
+    #     # Process infer_cfg
+    #     infer_cfg = infer_cfg or {}
+    #     if isinstance(infer_cfg.get('num_return_sequences'), int) and infer_cfg['num_return_sequences'] > 1:
+    #         infer_cfg['do_sample'] = True
+    #
+    #     # TODO: stop settings
+    #     stop = infer_cfg.get('stop', None)
+    #     eos_token_id = self.tokenizer.encode(stop, add_special_tokens=False)[0] \
+    #         if stop else self.tokenizer.eos_token_id
+    #
+    #     if eos_token_id is not None:
+    #         infer_cfg['eos_token_id'] = eos_token_id
+    #         infer_cfg['pad_token_id'] = eos_token_id  # setting eos_token_id as pad token
+    #
+    #
+    #     self.generation_config.update(**infer_cfg)
+    #
+    #     # stopping
+    #     stop_words = [self.generation_template.suffix[-1]]
+    #     decode_kwargs = {}
+    #     stopping_criteria = StoppingCriteriaList(
+    #         [StopWordsCriteria(self.tokenizer, stop_words, **decode_kwargs)])
+    #
+    #     # Run inference
+    #     output_ids = self.model.generate(
+    #         input_ids=input_ids,
+    #         attention_mask=attention_mask,
+    #         generation_config=self.generation_config,
+    #         stopping_criteria=stopping_criteria, )
+    #
+    #     response = self.tokenizer.decode(output_ids[0, len(input_ids[0]):], True, **decode_kwargs)
+    #     return response
 
     @torch.no_grad()
     def predict(self, inputs: Union[str, dict, list], infer_cfg: dict = dict({})) -> dict:
